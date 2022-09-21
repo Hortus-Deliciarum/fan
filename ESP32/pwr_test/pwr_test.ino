@@ -1,4 +1,4 @@
-#define POWERPIN  23
+#define POWERPIN  12
 
 byte state = 1;
 

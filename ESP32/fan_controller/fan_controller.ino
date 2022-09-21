@@ -25,11 +25,11 @@ int PWM1_Duty = 255;
 byte power_state = 1;
 
 typedef struct {
-  int number;
-  int power_pin;
-  int channel;
-  byte state;
-  byte pwm_value;
+  byte  number;
+  int   power_pin;
+  int   channel;
+  byte  state;
+  byte  pwm_value;
 } Fan;
 
 Button2 button_1, button_2;
@@ -42,10 +42,10 @@ void setup() {
   #if DEBUG
     Serial.begin(115200);
   #endif
+
+  // power section
   pinMode(POWER_PIN1, OUTPUT);
   pinMode(POWER_PIN2, OUTPUT);
-  //pinMode(PUSH1, INPUT_PULLUP);
-  //pinMode(PUSH2, INPUT_PULLUP);
 
   // Buttons section
   button_1.begin(PUSH1);
@@ -57,14 +57,13 @@ void setup() {
   encoder1.setPosition(DEF_PWM_VALUE);
   encoder2.setPosition(DEF_PWM_VALUE);
 
+  // PWM section
   ledcSetup(LEDC_CHANNEL_0, LEDC_BASE_FREQ, LEDC_TIMER_8_BIT);
   ledcAttachPin(FAN_PIN0, LEDC_CHANNEL_0);
   ledcSetup(LEDC_CHANNEL_1, LEDC_BASE_FREQ, LEDC_TIMER_8_BIT);
   ledcAttachPin(FAN_PIN1, LEDC_CHANNEL_1);
-
-  //digitalWrite(POWER_PIN, power_state);
-  ledcWrite(LEDC_CHANNEL_0, 128);
-  ledcWrite(LEDC_CHANNEL_1, 128);
+  ledcWrite(LEDC_CHANNEL_0, DEF_PWM_VALUE);
+  ledcWrite(LEDC_CHANNEL_1, DEF_PWM_VALUE);
 }
 
 void loop() {

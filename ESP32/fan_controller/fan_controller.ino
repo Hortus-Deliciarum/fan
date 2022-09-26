@@ -11,7 +11,7 @@
 #define LEDC_BASE_FREQ 1000
 #define FAN_PIN0 27
 #define FAN_PIN1 26
-#define DEF_PWM_VALUE 130
+#define DEF_PWM_VALUE 128
 #define MIN_PWM_VALUE 0
 #define MAX_PWM_VALUE 255
 #define STEPVALUE 5
@@ -40,17 +40,21 @@ HortusRotary encoder2(ROTARY2_PIN2, ROTARY2_PIN1, HortusRotary::LatchMode::FOUR3
 Fan fan1 = { 1, POWER_PIN1, LEDC_CHANNEL_0, 0, DEF_PWM_VALUE };
 Fan fan2 = { 2, POWER_PIN2, LEDC_CHANNEL_1, 0, DEF_PWM_VALUE };
 
+String FAN_1_STATE = "/fan/1/state";
+String FAN_2_STATE = "/fan/2/state";
+String FAN_1_SPEED = "/fan/1/speed";
+String FAN_2_SPEED = "/fan/2/speed";
+String AWAKE = "/fan/awake";
+
 void setup()
 {
 #if DEBUG
     Serial.begin(115200);
 #endif
 
-    HortusWifi(HortusWifi::Connection::BARETTI, 0);
-
     // power section
-    pinMode(fan1.power_pin, OUTPUT);
-    pinMode(fan2.power_pin, OUTPUT);
+    pinMode(POWER_PIN1, OUTPUT);
+    pinMode(POWER_PIN2, OUTPUT);
 
     // Buttons section
     button_1.begin(PUSH1);
@@ -59,8 +63,6 @@ void setup()
     button_2.setReleasedHandler(released);
 
     // Encoders section
-    encoder1.setStepValue(STEPVALUE);
-    encoder2.setStepValue(STEPVALUE);
     encoder1.setPosition(DEF_PWM_VALUE);
     encoder2.setPosition(DEF_PWM_VALUE);
 
@@ -72,29 +74,48 @@ void setup()
     ledcWrite(LEDC_CHANNEL_0, DEF_PWM_VALUE);
     ledcWrite(LEDC_CHANNEL_1, DEF_PWM_VALUE);
 
-    // OSC section
-    OscWiFi.subscribe(HortusWifi::Port::RCV_PORT, "/fan1/state",
+    // NETWORK Section
+
+    HortusWifi(HortusWifi::Connection::HORTUS, 20, AWAKE);
+
+    OscWiFi.subscribe(HortusWifi::RECV_PORT, FAN_1_STATE,
         [](const OscMessage& m) {
             float _state = m.arg<float>(0);
             set_fan_state(&fan1, _state);
+
+            _print("[ OSC RECEIVED ] ");
+            _println(FAN_1_STATE);
+
+            send_osc((String&)m.address(), _state);
         });
 
-    OscWiFi.subscribe(HortusWifi::Port::RCV_PORT, "/fan2/state",
+    OscWiFi.subscribe(HortusWifi::RECV_PORT, FAN_1_SPEED,
+        [](const OscMessage& m) {
+            float _speed = m.arg<float>(0);
+            set_fan_speed(encoder1, _speed);
+
+            _print("[ OSC RECEIVED ] ");
+            _println(FAN_1_SPEED);
+        });
+
+    OscWiFi.subscribe(HortusWifi::RECV_PORT, FAN_2_STATE,
         [](const OscMessage& m) {
             float _state = m.arg<float>(0);
             set_fan_state(&fan2, _state);
+
+            _print("[ OSC RECEIVED ] ");
+            _println(FAN_2_STATE);
+
+            send_osc((String&)m.address(), _state);
         });
 
-    OscWiFi.subscribe(HortusWifi::Port::RCV_PORT, "/fan1/speed",
+    OscWiFi.subscribe(HortusWifi::RECV_PORT, FAN_2_SPEED,
         [](const OscMessage& m) {
             float _speed = m.arg<float>(0);
-            set_pwm_position(encoder1, _speed);
-        });
+            set_fan_speed(encoder2, _speed);
 
-    OscWiFi.subscribe(HortusWifi::Port::RCV_PORT, "/fan2/speed",
-        [](const OscMessage& m) {
-            float _speed = m.arg<float>(0);
-            set_pwm_position(encoder1, _speed);
+            _print("[ OSC RECEIVED ] ");
+            _println(FAN_2_SPEED);
         });
 }
 
@@ -125,7 +146,25 @@ void released(Button2& btn)
 void switch_state(Fan* fanny)
 {
     fanny->state = !(fanny->state);
-    print_new_state(fanny->number, fanny->state);
+    _print("[ FAN ");
+    _print(String(fanny->number));
+    _print(" ] NEW STATE:\t");
+    _println(String(fanny->state));
+}
+
+void set_fan_state(Fan* fanny, float value)
+{
+    _print("[ SET ] FAN ");
+    _print(String(fanny->number));
+    _print(" STATE: ");
+
+    if (value) {
+        fanny->state = true;
+        _println(String(1));
+    } else {
+        fanny->state = false;
+        _println(String(0));
+    }
 }
 
 void check_state(Fan* fanny)
@@ -142,26 +181,11 @@ void set_fan_state(Fan* fanny, float state)
     print_new_state(fanny->number, fanny->state);
 }
 
-void print_new_state(byte number, byte state)
+void set_fan_speed(HortusRotary& _enc, float _spd)
 {
-    _print("[ FAN ");
-    _print(String(number));
-    _print(" ] NEW STATE:\t");
-    _println(String(state));
-}
-
-void set_pwm(Fan* fanny, byte value)
-{
-    if (value != fanny->pwm_value) {
-        fanny->pwm_value = value;
-        ledcWrite(fanny->channel, value);
-    }
-}
-
-void set_pwm_position(HortusRotary& enc, float spd)
-{
-    int new_pos = (int)spd / STEPVALUE * STEPVALUE;
-    enc.setPosition(new_pos);
+    int _speed = (int)_spd / STEPVALUE * STEPVALUE;
+    _speed = constrain(_speed, MIN_PWM_VALUE, MAX_PWM_VALUE);
+    _enc.setPosition(_speed);
 }
 
 void check_rotary(Fan* fanny, HortusRotary& enc)
@@ -180,7 +204,17 @@ void check_rotary(Fan* fanny, HortusRotary& enc)
         _print(" ] ");
         _print("SET NEW PWM TO VALUE:\t");
         _println(String(fanny->pwm_value));
+
+        if (fanny->number == 1)
+            send_osc(FAN_1_SPEED, fanny->pwm_value);
+        else if (fanny->number == 2)
+            send_osc(FAN_2_SPEED, fanny->pwm_value);
     }
+}
+
+void send_osc(String& addr, int value)
+{
+    OscWiFi.send(HortusWifi::HOST, HortusWifi::SEND_PORT, addr, value);
 }
 
 int _print(String s)

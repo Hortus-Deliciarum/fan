@@ -11,7 +11,7 @@
 #define LEDC_BASE_FREQ 1000
 #define FAN_PIN0 27
 #define FAN_PIN1 26
-#define DEF_PWM_VALUE 128
+#define DEF_PWM_VALUE 120
 #define MIN_PWM_VALUE 0
 #define MAX_PWM_VALUE 255
 #define STEPVALUE 5
@@ -63,6 +63,8 @@ void setup()
     button_2.setReleasedHandler(released);
 
     // Encoders section
+    encoder1.setStepValue(STEPVALUE);
+    encoder2.setStepValue(STEPVALUE);
     encoder1.setPosition(DEF_PWM_VALUE);
     encoder2.setPosition(DEF_PWM_VALUE);
 
@@ -76,7 +78,7 @@ void setup()
 
     // NETWORK Section
 
-    HortusWifi(HortusWifi::Connection::HORTUS, 20, AWAKE);
+    HortusWifi(HortusWifi::Connection::BARETTI, 20, AWAKE);
 
     OscWiFi.subscribe(HortusWifi::RECV_PORT, FAN_1_STATE,
         [](const OscMessage& m) {
@@ -132,6 +134,8 @@ void loop()
     check_rotary(&fan2, encoder2);
 }
 
+// MANAGE FAN STATE
+
 void released(Button2& btn)
 {
     if (btn == button_1) {
@@ -175,29 +179,34 @@ void check_state(Fan* fanny)
         digitalWrite(fanny->power_pin, LOW);
 }
 
+/*
 void set_fan_state(Fan* fanny, float state)
 {
     fanny->state = (byte)state;
     print_new_state(fanny->number, fanny->state);
 }
+*/
+
+// MANAGE FAN SPEED
 
 void set_fan_speed(HortusRotary& _enc, float _spd)
 {
-    int _speed = (int)_spd / STEPVALUE * STEPVALUE;
-    _speed = constrain(_speed, MIN_PWM_VALUE, MAX_PWM_VALUE);
+    int _speed = constrain((int)_spd, MIN_PWM_VALUE, MAX_PWM_VALUE);
+    _speed = _speed / STEPVALUE * STEPVALUE;
     _enc.setPosition(_speed);
 }
 
 void check_rotary(Fan* fanny, HortusRotary& enc)
 {
     enc.tick();
-    int new_val = enc.getPosition(); // 256 (precedente 255)
+    int new_val = enc.getPosition();
 
     if (new_val != fanny->pwm_value) { // yes
-        new_val = constrain(new_val, MIN_PWM_VALUE, MAX_PWM_VALUE); // 255
+        new_val = constrain(new_val, MIN_PWM_VALUE, MAX_PWM_VALUE);
         enc.setPosition(new_val);
-        set_pwm(fanny, new_val); // pwm = 255
-        // enc.setPosition(new_val); // position = 255
+        //new_val = (int)new_val / STEPVALUE * STEPVALUE;
+        set_pwm(fanny, (byte)new_val);
+        // enc.setPosition(new_val);
 
         _print("[ FAN ");
         _print(String(fanny->number));
@@ -210,6 +219,11 @@ void check_rotary(Fan* fanny, HortusRotary& enc)
         else if (fanny->number == 2)
             send_osc(FAN_2_SPEED, fanny->pwm_value);
     }
+}
+
+void set_pwm(Fan *fanny, byte value) 
+{
+    fanny->pwm_value = value;
 }
 
 void send_osc(String& addr, int value)
